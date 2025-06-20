@@ -21,12 +21,11 @@ DEFAULT_ULTIMATE_THRESHOLD = 100
 monitoring = False
 FAIL_THRESHOLD = 5
 
-# Color tags for console highlighting
 COLOR_TAGS = {
-    "ok": {"foreground": "#4CAF50"},        # Green
-    "high": {"foreground": "#FFC107"},     # Amber
-    "critical": {"foreground": "#FF5722"}, # Deep Orange
-    "lost": {"foreground": "#F44336"}      # Red
+    "ok": {"foreground": "#4CAF50"},
+    "high": {"foreground": "#FFC107"},
+    "critical": {"foreground": "#FF5722"},
+    "lost": {"foreground": "#F44336"}
 }
 
 # ----------------------- STORAGE -----------------------
@@ -45,7 +44,8 @@ def ensure_config():
                 "lost_packet_threshold": FAIL_THRESHOLD,
                 "mute_high": False,
                 "mute_critical_beep": False,
-                "mute_critical_notify": False
+                "mute_critical_notify": False,
+                "last_ip": DEFAULT_IP
             }, f)
 
 def load_settings():
@@ -85,13 +85,7 @@ def flash_taskbar():
     if platform.system() == "Windows":
         try:
             user32 = ctypes.windll.user32
-            hwnd = user32.GetForegroundWindow()  # fallback
-            try:
-                # More accurate HWND using the window title
-                hwnd = user32.FindWindowW(None, app.title())
-            except:
-                pass
-
+            hwnd = user32.FindWindowW(None, app.title())
             class FLASHWINFO(ctypes.Structure):
                 _fields_ = [("cbSize", ctypes.c_uint),
                             ("hwnd", ctypes.c_void_p),
@@ -104,7 +98,6 @@ def flash_taskbar():
             user32.FlashWindowEx(ctypes.byref(info))
         except Exception as e:
             print("Taskbar flashing failed:", e)
-
 
 # ----------------------- PING LOGIC -----------------------
 def ping_once(host):
@@ -192,7 +185,8 @@ def export_log():
     now = datetime.now().strftime("%Y-%m-%d")
     ip = ip_combo.get().replace(".", "_")
     default_name = f"{now}__{ip}.log"
-    file = filedialog.asksaveasfilename(initialfile=default_name, defaultextension=".log", filetypes=[("Log files", "*.log"), ("Text files", "*.txt")])
+    file = filedialog.asksaveasfilename(initialfile=default_name, defaultextension=".log",
+                                        filetypes=[("Log files", "*.log"), ("Text files", "*.txt")])
     if file:
         with open(file, 'w', encoding='utf-8') as f:
             f.write(content)
@@ -205,12 +199,11 @@ def toggle_theme():
 
 app = tk.Tk()
 app.title("LibrePingMonitor")
-app.geometry(settings["ui_state"]["geometry"])
-if settings["ui_state"]["maximized"]:
+app.geometry(settings["ui_state"].get("geometry", "800x800"))
+if settings["ui_state"].get("maximized", False):
     app.state('zoomed')
 
 is_dark = settings.get("theme", "dark") == "dark"
-
 bg_color = "#1e1e1e" if is_dark else "#ffffff"
 fg_color = "white" if is_dark else "black"
 entry_bg = "#2e2e2e" if is_dark else "white"
@@ -225,9 +218,12 @@ style.configure("TCombobox", fieldbackground=entry_bg, background=entry_bg, fore
 
 stored_ips = settings["ips"]
 
+# ----------------- UI ELEMENTS ------------------
 tk.Label(app, text="Select or Enter IP Address:", bg=bg_color, fg=fg_color).pack()
 ip_combo = ttk.Combobox(app, values=stored_ips, width=50)
-ip_combo.set(stored_ips[0] if stored_ips else DEFAULT_IP)
+last_ip = settings.get("last_ip")
+default_ip = stored_ips[0] if stored_ips else DEFAULT_IP
+ip_combo.set(last_ip if last_ip in stored_ips else default_ip)
 ip_combo.pack()
 
 tk.Label(app, text="Latency Threshold (ms):", bg=bg_color, fg=fg_color).pack()
@@ -251,35 +247,37 @@ def update_log_setting():
     settings["log_enabled"] = log_var.get()
     save_settings(settings)
 
-tk.Checkbutton(app, text="Save logs to file", variable=log_var, command=update_log_setting, bg=bg_color, fg=fg_color, selectcolor=entry_bg).pack(pady=5)
-
 mute_high_var = tk.BooleanVar(value=settings.get("mute_high", False))
 def update_mute_high():
     settings["mute_high"] = mute_high_var.get()
     save_settings(settings)
-
-tk.Checkbutton(app, text="Mute High Ping Beep", variable=mute_high_var, command=update_mute_high, bg=bg_color, fg=fg_color, selectcolor=entry_bg).pack()
 
 mute_critical_beep_var = tk.BooleanVar(value=settings.get("mute_critical_beep", False))
 def update_mute_critical_beep():
     settings["mute_critical_beep"] = mute_critical_beep_var.get()
     save_settings(settings)
 
-tk.Checkbutton(app, text="Mute Critical Beep", variable=mute_critical_beep_var, command=update_mute_critical_beep, bg=bg_color, fg=fg_color, selectcolor=entry_bg).pack()
-
 mute_critical_notify_var = tk.BooleanVar(value=settings.get("mute_critical_notify", False))
 def update_mute_critical_notify():
     settings["mute_critical_notify"] = mute_critical_notify_var.get()
     save_settings(settings)
 
-tk.Checkbutton(app, text="Mute Critical Notification", variable=mute_critical_notify_var, command=update_mute_critical_notify, bg=bg_color, fg=fg_color, selectcolor=entry_bg).pack()
+checkbox_frame = tk.Frame(app, bg=bg_color)
+checkbox_frame.pack(fill=tk.X, padx=10, pady=5)
+
+tk.Checkbutton(checkbox_frame, text="Save logs to file", variable=log_var, command=update_log_setting, bg=bg_color, fg=fg_color, selectcolor=entry_bg).grid(row=0, column=0, sticky='w', padx=5)
+tk.Checkbutton(checkbox_frame, text="Mute High Ping Beep", variable=mute_high_var, command=update_mute_high, bg=bg_color, fg=fg_color, selectcolor=entry_bg).grid(row=0, column=1, sticky='w', padx=5)
+tk.Checkbutton(checkbox_frame, text="Mute Critical Beep", variable=mute_critical_beep_var, command=update_mute_critical_beep, bg=bg_color, fg=fg_color, selectcolor=entry_bg).grid(row=0, column=2, sticky='w', padx=5)
+tk.Checkbutton(checkbox_frame, text="Mute Critical Notification", variable=mute_critical_notify_var, command=update_mute_critical_notify, bg=bg_color, fg=fg_color, selectcolor=entry_bg).grid(row=0, column=3, sticky='w', padx=5)
+
+for i in range(4):
+    checkbox_frame.columnconfigure(i, weight=1)
 
 output_box = scrolledtext.ScrolledText(app, height=20, bg=bg_color, fg=fg_color, insertbackground=fg_color)
 output_box.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 output_box.config(state=tk.DISABLED)
 output_box.bind("<Key>", lambda e: "break")
 
-# Define text tags for colors
 for tag, style_dict in COLOR_TAGS.items():
     output_box.tag_config(tag, **style_dict)
 
@@ -292,6 +290,7 @@ def start_threaded_monitor():
     settings["threshold"] = int(thresh_entry.get())
     settings["ultimate_threshold"] = int(ultimate_thresh_entry.get())
     settings["lost_packet_threshold"] = int(lost_thresh_entry.get())
+    settings["last_ip"] = ip_combo.get()
     save_settings(settings)
     threading.Thread(
         target=start_monitoring,
